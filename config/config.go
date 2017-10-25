@@ -14,6 +14,9 @@ import (
 
 // Config contains all config values
 type Config struct {
+	Executable struct {
+		Command string `validate:"nonzero"`
+	}
 	RabbitMq struct {
 		Host        string `validate:"nonzero"`
 		Username    string `validate:"nonzero"`
@@ -44,6 +47,9 @@ type Config struct {
 	Logs struct {
 		Error string `validate:"nonzero"`
 		Info  string `validate:"nonzero"`
+	}
+	Key map[string]*struct {
+		Executable string
 	}
 }
 
@@ -91,7 +97,9 @@ func CreateFromString(config string) Config {
 // CreateFromCliContext creates config from options passed to cli
 func CreateFromCliContext(c *cli.Context) Config {
 	str := fmt.Sprintf(
-		`[rabbitmq]
+		`[executable]
+		command=%s
+		[rabbitmq]
 		host=%s
 		username=%s
 		password=%s
@@ -116,6 +124,7 @@ func CreateFromCliContext(c *cli.Context) Config {
 		autodelete=%s
 		type=%s
 		durable=%s`,
+		c.String("executable"),
 		c.String("host"),
 		c.String("username"),
 		c.String("password"),

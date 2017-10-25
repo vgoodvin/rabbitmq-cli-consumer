@@ -27,6 +27,8 @@ func main() {
 	app.Author = "Richard van den Brand"
 	app.Email = "richard@vandenbrand.org"
 	app.Version = "2.0.0-dev"
+	app.HideHelp = true
+	app.ArgsUsage = " "
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:  "executable, e",
@@ -36,7 +38,7 @@ func main() {
 			Name:  "configuration, c",
 			Usage: "Location of configuration file",
 		},
-		cli.StringFlag{
+		cli.BoolFlag{
 			Name:  "quiet, Q",
 			Usage: "Enable quite mode (disables loggging to stdout and stderr)",
 		},
@@ -60,15 +62,16 @@ func main() {
 			Name:  "port, P",
 			Usage: "RabbitMQ port",
 		},
-		cli.StringFlag{
+		cli.BoolFlag{
 			Name:  "compression, o",
 			Usage: "Enable compression of messages",
 		},
-		cli.StringFlag{
+		cli.IntFlag{
 			Name:  "prefetch-count, C",
 			Usage: "Prefetch count",
+			Value: 3,
 		},
-		cli.StringFlag{
+		cli.BoolFlag{
 			Name:  "prefetch-global, G",
 			Usage: "Set prefetch count as global",
 		},
@@ -76,19 +79,19 @@ func main() {
 			Name:  "queue-name,q",
 			Usage: "Queue name",
 		},
-		cli.StringFlag{
+		cli.BoolFlag{
 			Name:  "queue-durable,D",
 			Usage: "Mark queue as durable",
 		},
-		cli.StringFlag{
+		cli.BoolFlag{
 			Name:  "queue-autodelete,a",
 			Usage: "Autodelete queue",
 		},
-		cli.StringFlag{
+		cli.BoolFlag{
 			Name:  "queue-exlusive,E",
 			Usage: "Mark queue as exclusive",
 		},
-		cli.StringFlag{
+		cli.BoolFlag{
 			Name:  "queue-nowait, T",
 			Usage: "Do not wait for the server to confirm the binding",
 		},
@@ -100,7 +103,7 @@ func main() {
 			Name:  "exchange-name, X",
 			Usage: "Exchange name",
 		},
-		cli.StringFlag{
+		cli.BoolFlag{
 			Name:  "exchange-autodelete, t",
 			Usage: "Autodelete exchange",
 		},
@@ -108,24 +111,19 @@ func main() {
 			Name:  "exchange-type, y",
 			Usage: "Exchange type (direct, fanout, topic or headers)",
 		},
-		cli.StringFlag{
+		cli.BoolFlag{
 			Name:  "exchange-durable, j",
 			Usage: "Mark exchange as durable",
 		},
 	}
 	app.Action = func(c *cli.Context) {
-		if c.String("executable") == "" {
-			cli.ShowAppHelp(c)
-			os.Exit(1)
-		}
-
 		verbose := !c.Bool("quiet")
 		logger := log.New(os.Stderr, "", 0)
 
 		// Config finding and parsing
 		// Perhaps refactor into something more elegant
-		user, _ := user.Current()
-		locator := config.NewLocator([]string{c.String("configuration")}, &afero.OsFs{}, user)
+		osUser, _ := user.Current()
+		locator := config.NewLocator([]string{c.String("configuration")}, &afero.OsFs{}, osUser)
 		configs := []config.Config{}
 		err, locations := locator.Locate()
 		if err != nil {
@@ -160,7 +158,7 @@ func main() {
 			logger.Fatalf("Failed creating info log: %s", err)
 		}
 
-		factory := command.Factory(c.String("executable"))
+		factory := command.Factory(cfg.Executable.Command)
 
 		client, err := consumer.New(&cfg, factory, errLogger, infLogger)
 		if err != nil {
