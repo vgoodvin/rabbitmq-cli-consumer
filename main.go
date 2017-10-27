@@ -117,6 +117,11 @@ func main() {
 		},
 	}
 	app.Action = func(c *cli.Context) {
+		if c.NumFlags() == 0 {
+			cli.ShowAppHelp(c)
+			os.Exit(1)
+		}
+
 		verbose := !c.Bool("quiet")
 		logger := log.New(os.Stderr, "", 0)
 
