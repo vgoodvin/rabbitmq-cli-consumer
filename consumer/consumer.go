@@ -23,6 +23,7 @@ type Consumer struct {
 	InfLogger   *log.Logger
 	Executer    command.Executer
 	Compression bool
+	CommandRoutes config.CommandRoutes
 }
 
 // Consume starts consuming messages from RabbitMQ
@@ -68,7 +69,18 @@ func (c *Consumer) ProcessMessage(msg Delivery) {
 		input = b.Bytes()
 	}
 
-	cmd := c.Factory.Create(base64.StdEncoding.EncodeToString(input))
+	// TODO: test it
+	var factory *command.CommandFactory
+
+	if commandConfig, ok := c.CommandRoutes[msg.RoutingKey()]; ok {
+		// A particular command exists for a given route
+		factory = command.Factory(commandConfig.Executable)
+	} else {
+		// Using default command executable path
+		factory = c.Factory
+	}
+
+	cmd := factory.Create(base64.StdEncoding.EncodeToString(input))
 	out, err := c.Executer.Execute(cmd)
 
 	if err != nil {
@@ -138,6 +150,7 @@ func New(cfg *config.Config, factory *command.CommandFactory, errLogger, infLogg
 		InfLogger:   infLogger,
 		Executer:    command.New(errLogger, infLogger),
 		Compression: cfg.RabbitMq.Compression,
+		CommandRoutes: cfg.Key,
 	}, nil
 }
 
@@ -224,6 +237,7 @@ type Delivery interface {
 	IsRpcMessage() bool
 	CorrelationId() string
 	ReplyTo() string
+	RoutingKey() string
 }
 
 type RabbitMqDelivery struct {
@@ -253,4 +267,8 @@ func (r RabbitMqDelivery) CorrelationId() string {
 
 func (r RabbitMqDelivery) ReplyTo() string {
 	return r.delivery.ReplyTo
+}
+
+func (r RabbitMqDelivery) RoutingKey() string {
+	return r.delivery.RoutingKey
 }

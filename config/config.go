@@ -48,9 +48,12 @@ type Config struct {
 		Error string `validate:"nonzero"`
 		Info  string `validate:"nonzero"`
 	}
-	Key map[string]*struct {
-		Executable string
-	}
+	Key CommandRoutes
+}
+
+// Map "routing key" -> "command executable"
+type CommandRoutes map[string]*struct {
+	Executable string
 }
 
 // Validate validtes Config and prints errors.
