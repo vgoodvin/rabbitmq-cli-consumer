@@ -48,7 +48,7 @@ type Config struct {
 		Error string `validate:"nonzero"`
 		Info  string `validate:"nonzero"`
 	}
-	Key CommandRoutes
+	Route CommandRoutes
 }
 
 // Map "routing key" -> "command executable"

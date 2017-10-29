@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"os/exec"
 
 	"github.com/ricbra/rabbitmq-cli-consumer/command"
 	"github.com/ricbra/rabbitmq-cli-consumer/config"
@@ -15,15 +16,16 @@ import (
 
 // Consumer represents a consumer
 type Consumer struct {
-	Channel     Channel
-	Connection  *amqp.Connection
-	Queue       string
-	Factory     *command.CommandFactory
-	ErrLogger   *log.Logger
-	InfLogger   *log.Logger
-	Executer    command.Executer
-	Compression bool
+	Channel       Channel
+	Connection    *amqp.Connection
+	Queue         string
+	Factory       *command.CommandFactory
+	ErrLogger     *log.Logger
+	InfLogger     *log.Logger
+	Executer      command.Executer
+	Compression   bool
 	CommandRoutes config.CommandRoutes
+	Verbose       bool
 }
 
 // Consume starts consuming messages from RabbitMQ
@@ -81,25 +83,46 @@ func (c *Consumer) ProcessMessage(msg Delivery) {
 	}
 
 	cmd := factory.Create(base64.StdEncoding.EncodeToString(input))
-	out, err := c.Executer.Execute(cmd)
+
+	if msg.IsRpcMessage() {
+		c.processRpc(msg, cmd)
+	} else {
+		c.processNonRpc(msg, cmd)
+	}
+
+}
+
+func (c *Consumer) processNonRpc(msg Delivery, cmd *exec.Cmd) {
+
+	err := c.Executer.Execute(cmd, c.Verbose)
 
 	if err != nil {
 		msg.Nack(true, true)
 		return
 	}
 
-	if msg.IsRpcMessage() {
-		c.InfLogger.Println("Message is RPC message, trying to send reply...")
+	// All went fine, ack message
+	msg.Ack(true)
+}
 
-		if err := c.Reply(msg, out); err != nil {
-			c.InfLogger.Println("Sending RPC reply failed. Check error log.")
-			c.ErrLogger.Printf("Error occured during send RPC reply: %s", err)
-			msg.Nack(true, true)
+func (c *Consumer) processRpc(msg Delivery, cmd *exec.Cmd) {
+	out, err := c.Executer.ExecuteRpc(cmd)
 
-			return
-		}
-		c.InfLogger.Println("RPC reply send.")
+	if err != nil {
+		msg.Nack(true, true)
+		return
 	}
+
+	c.InfLogger.Println("Message is RPC message, trying to send reply...")
+
+	if err := c.Reply(msg, out); err != nil {
+		c.InfLogger.Println("Sending RPC reply failed. Check error log.")
+		c.ErrLogger.Printf("Error occured during send RPC reply: %s", err)
+		msg.Nack(true, true)
+
+		return
+	}
+	c.InfLogger.Println("RPC reply send.")
 
 	// All went fine, ack message
 	msg.Ack(true)
@@ -120,7 +143,7 @@ func (c *Consumer) Reply(msg Delivery, out []byte) error {
 }
 
 // New returns a initialized consumer based on config
-func New(cfg *config.Config, factory *command.CommandFactory, errLogger, infLogger *log.Logger) (*Consumer, error) {
+func New(cfg *config.Config, factory *command.CommandFactory, errLogger, infLogger *log.Logger, verbose bool) (*Consumer, error) {
 	uri := ParseURI(cfg.RabbitMq.Username, cfg.RabbitMq.Password, cfg.RabbitMq.Host, cfg.RabbitMq.Port, cfg.RabbitMq.Vhost)
 
 	infLogger.Println("Connecting RabbitMQ...")
@@ -142,20 +165,21 @@ func New(cfg *config.Config, factory *command.CommandFactory, errLogger, infLogg
 	}
 
 	return &Consumer{
-		Channel:     ch,
-		Connection:  conn,
-		Queue:       cfg.Queue.Name,
-		Factory:     factory,
-		ErrLogger:   errLogger,
-		InfLogger:   infLogger,
-		Executer:    command.New(errLogger, infLogger),
-		Compression: cfg.RabbitMq.Compression,
-		CommandRoutes: cfg.Key,
+		Channel:       ch,
+		Connection:    conn,
+		Queue:         cfg.Queue.Name,
+		Factory:       factory,
+		ErrLogger:     errLogger,
+		InfLogger:     infLogger,
+		Executer:      command.New(errLogger, infLogger),
+		Compression:   cfg.RabbitMq.Compression,
+		CommandRoutes: cfg.Route,
+		Verbose: 	   verbose,
 	}, nil
 }
 
 // Initialize channel according to config
-func Initialize(cfg *config.Config, ch Channel, errLogger, infLogger *log.Logger) error {
+func Initialize(cfg *config.Config, ch Channel, infLogger, errLogger *log.Logger) error {
 	infLogger.Println("Setting QoS... ")
 
 	if err := ch.Qos(cfg.Prefetch.Count, 0, cfg.Prefetch.Global); err != nil {

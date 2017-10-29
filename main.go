@@ -39,6 +39,10 @@ func main() {
 			Usage: "Location of configuration file",
 		},
 		cli.BoolFlag{
+			Name:  "verbose",
+			Usage: "Includes executable output to stdout and stderr",
+		},
+		cli.BoolFlag{
 			Name:  "quiet, Q",
 			Usage: "Enable quite mode (disables loggging to stdout and stderr)",
 		},
@@ -122,7 +126,8 @@ func main() {
 			os.Exit(1)
 		}
 
-		verbose := !c.Bool("quiet")
+		quiet := c.Bool("quiet")
+		verbose := c.Bool("verbose")
 		logger := log.New(os.Stderr, "", 0)
 
 		// Config finding and parsing
@@ -153,19 +158,19 @@ func main() {
 			logger.Fatalf("Please fix configuration issues.")
 		}
 
-		errLogger, err := createLogger(cfg.Logs.Error, verbose, os.Stderr)
+		errLogger, err := createLogger(cfg.Logs.Error, quiet, os.Stderr)
 		if err != nil {
 			logger.Fatalf("Failed creating error log: %s", err)
 		}
 
-		infLogger, err := createLogger(cfg.Logs.Info, verbose, os.Stdout)
+		infLogger, err := createLogger(cfg.Logs.Info, quiet, os.Stdout)
 		if err != nil {
 			logger.Fatalf("Failed creating info log: %s", err)
 		}
 
 		factory := command.Factory(cfg.Executable.Command)
 
-		client, err := consumer.New(&cfg, factory, errLogger, infLogger)
+		client, err := consumer.New(&cfg, factory, errLogger, infLogger, verbose)
 		if err != nil {
 			errLogger.Fatalf("Failed creating consumer: %s", err)
 		}
@@ -195,7 +200,7 @@ func main() {
 	app.Run(os.Args)
 }
 
-func createLogger(filename string, verbose bool, out io.Writer) (*log.Logger, error) {
+func createLogger(filename string, quiet bool, out io.Writer) (*log.Logger, error) {
 	file, err := os.OpenFile(filename, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0660)
 
 	if err != nil {
@@ -208,7 +213,7 @@ func createLogger(filename string, verbose bool, out io.Writer) (*log.Logger, er
 		file,
 	}
 
-	if verbose {
+	if !quiet {
 		writers = append(writers, out)
 	}
 
